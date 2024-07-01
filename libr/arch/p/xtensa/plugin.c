@@ -846,7 +846,7 @@ static void esil_load_relative(xtensa_isa isa, xtensa_opcode opcode, xtensa_form
 	r_strbuf_appendf (
 		&op->esil,
 			"0x%x" 		CM
-			"$$"   		CM
+			"0x%"PFMT64x	CM
 			"3"		CM
 			"+"		CM
 			"0xFFFFFFFC"	CM
@@ -857,6 +857,7 @@ static void esil_load_relative(xtensa_isa isa, xtensa_opcode opcode, xtensa_form
 			"=",
 		// offset
 		offset,
+		op->addr,
 		// data
 		xtensa_regfile_shortname (isa, dst_rf),
 		dst
@@ -2053,6 +2054,7 @@ static char *regs(RArchSession *as) {
 		"=PC	pc\n"
 		"=BP	a14\n"
 		"=SP	a1\n"
+		"=SN	a1\n"
 		"=A0	a2\n"
 		"=A1	a3\n"
 		"=A2	a4\n"
@@ -2087,13 +2089,13 @@ static char *regs(RArchSession *as) {
 
 static int archinfo(RArchSession *as, ut32 q) {
 	switch (q) {
-	case R_ANAL_ARCHINFO_MAX_OP_SIZE:
+	case R_ARCH_INFO_MAXOP_SIZE:
 		return 8;
-	case R_ANAL_ARCHINFO_INV_OP_SIZE:
-	case R_ANAL_ARCHINFO_MIN_OP_SIZE:
+	case R_ARCH_INFO_INVOP_SIZE:
+	case R_ARCH_INFO_MINOP_SIZE:
 		return 2;
-	case R_ANAL_ARCHINFO_DATA_ALIGN:
-	case R_ANAL_ARCHINFO_ALIGN:
+	case R_ARCH_INFO_DATA_ALIGN:
+	case R_ARCH_INFO_CODE_ALIGN:
 		return 1;
 	}
 	return 1; // XXX

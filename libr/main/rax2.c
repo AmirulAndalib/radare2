@@ -15,8 +15,8 @@ typedef struct {
 	bool hexstr2raw;	// -s
 	bool swapendian;	// -e
 	bool raw2hexstr;	// -S
-	bool binstr2raw;	// -b
-	bool hashstr;		// -X
+	bool binstr2raw;	// -Z
+	bool hashstr;		// -H
 	bool keepbase;		// -k
 	bool floating;		// -f
 	bool decimal;		// -d
@@ -29,24 +29,31 @@ typedef struct {
 	bool slurphex;		// -F
 	bool binaryraw;		// -c
 	bool signedword;	// -w
-	bool str2hexstr;	// -B
+	bool str2hexstr;	// -z
 	bool manybases;		// -r
-	bool binstr2hex;	// -L
-	bool dumpcstr;		// -i
+	bool binstr2hex;	// -X
+	bool dumpcstr;		// -C
 	bool octal2raw;		// -o
-	bool ipaddr2num;	// -I
+	bool ipaddr2num;	// -i
 	bool newline;		// -n
 	bool jsonbases;		// -j
+	bool forcebase;		// -b
+	bool quiet;		// -q
 } RaxActions;
 
-static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int *fm, PJ **pj);
+typedef struct {
+	char imode;
+	char omode;
+} RaxMode;
 
-static int use_stdin(RNum *num, RaxActions *flags, int *fm, PJ **pj) {
+static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, RaxMode *mode, PJ **pj);
+
+static int use_stdin(RNum *num, RaxActions *flags, RaxMode *mode, PJ **pj) {
 	r_return_val_if_fail (num && flags, -1);
 	int rc = 0;
 	if (flags->slurphex) {
 		char buf[1]= {0};
-		if (!rax (num, buf, 1, 0, flags, fm, pj)) {
+		if (!rax (num, buf, 1, 0, flags, mode, pj)) {
 			rc = 1;
 		}
 	} else {
@@ -56,7 +63,7 @@ static int use_stdin(RNum *num, RaxActions *flags, int *fm, PJ **pj) {
 			if (!buf) {
 				break;
 			}
-			if (!rax (num, buf, l, 0, flags, fm, pj)) {
+			if (!rax (num, buf, l, 0, flags, mode, pj)) {
 				rc = 1;
 			}
 			free (buf);
@@ -76,7 +83,7 @@ static void rax2_newline(RaxActions flags) {
 	fflush (stdout);
 }
 
-static bool format_output(RNum *num, char mode, const char *s, int force_mode, RaxActions flags) {
+static bool format_output(RNum *num, char mode, const char *s, RaxMode m, RaxActions flags) {
 	const char *errstr = NULL;
 	ut64 n = r_num_calc (num, s, &errstr);
 	if (errstr) {
@@ -84,8 +91,8 @@ static bool format_output(RNum *num, char mode, const char *s, int force_mode, R
 		return false;
 	}
 	char strbits[65];
-	if (force_mode) {
-		mode = force_mode;
+	if (!flags.forcebase) {
+		m.omode = mode;
 	}
 	if (flags.swapendian) {
 		ut64 n2 = n;
@@ -94,7 +101,7 @@ static bool format_output(RNum *num, char mode, const char *s, int force_mode, R
 			n >>= 32;
 		}
 	}
-	switch (mode) {
+	switch (m.omode) {
 	case 'I':
 		printf ("%" PFMT64d "\n", n);
 		break;
@@ -106,6 +113,9 @@ static bool format_output(RNum *num, char mode, const char *s, int force_mode, R
 		float *f = (float *) &n2;
 		printf ("%ff\n", *f);
 		}
+		break;
+	case 'V':
+
 		break;
 	case 'f':
 		printf ("%.01lf\n", num->fvalue);
@@ -136,7 +146,7 @@ static bool format_output(RNum *num, char mode, const char *s, int force_mode, R
 		}
 		break;
 	default:
-		R_LOG_ERROR ("Unknown output mode %d", mode);
+		R_LOG_ERROR ("Unknown output mode %d", m.omode);
 		return false;
 	}
 	return true;
@@ -148,54 +158,55 @@ static void help_usage(void) {
 
 static int help(void) {
 	printf (
-		"  =[base]                      ;  rax2 =10 0x46 -> output in base 10\n"
-		"  int     ->  hex              ;  rax2 10\n"
-		"  hex     ->  int              ;  rax2 0xa\n"
-		"  -int    ->  hex              ;  rax2 -77\n"
-		"  -hex    ->  int              ;  rax2 0xffffffb3\n"
-		"  int     ->  bin              ;  rax2 b30\n"
-		"  int     ->  ternary          ;  rax2 t42\n"
-		"  bin     ->  int              ;  rax2 1010d\n"
-		"  ternary ->  int              ;  rax2 1010dt\n"
-		"  float   ->  hex              ;  rax2 3.33f\n"
-		"  hex     ->  float            ;  rax2 Fx40551ed8\n"
-		"  oct     ->  hex              ;  rax2 35o\n"
-		"  hex     ->  oct              ;  rax2 Ox12 (O is a letter)\n"
-		"  bin     ->  hex              ;  rax2 1100011b\n"
-		"  hex     ->  bin              ;  rax2 Bx63\n"
-		"  ternary ->  hex              ;  rax2 212t\n"
-		"  hex     ->  ternary          ;  rax2 Tx23\n"
-		"  raw     ->  hex              ;  rax2 -S < /binfile\n"
-		"  hex     ->  raw              ;  rax2 -s 414141\n"
-		"  -a      show ascii table     ;  rax2 -a\n"
-		"  -b      bin -> str           ;  rax2 -b 01000101 01110110\n"
-		"  -B      str -> bin           ;  rax2 -B hello\n"
-		"  -c      output in C string   ;  rax2 -c 0x1234 # \\x34\\x12\\x00\\x00\n"
-		"  -d      force integer        ;  rax2 -d 3 -> 3 instead of 0x3\n"
-		"  -e      swap endianness      ;  rax2 -e 0x33\n"
-		"  -D      base64 decode        ;  rax2 -D \"aGVsbG8=\"\n"
-		"  -E      base64 encode        ;  rax2 -E \"hello\"\n"
-		"  -f      floating point       ;  rax2 -f 6.3+2.1\n"
-		"  -F      stdin slurp code hex ;  rax2 -F < shellcode.[c/py/js]\n"
-		"  -h      help                 ;  rax2 -h\n"
-		"  -i      dump as C byte array ;  rax2 -i < bytes\n"
-		"  -I      IP address <-> LONG  ;  rax2 -I 3530468537\n"
-		"  -j      json format output   ;  rax2 -j 0x1234 # same as r2 -c '?j 0x1234'\n"
-		"  -k      keep base            ;  rax2 -k 33+3 -> 36\n"
-		"  -K      randomart            ;  rax2 -K 0x34 1020304050\n"
-		"  -L      bin -> hex(bignum)   ;  rax2 -L 111111111 # 0x1ff\n"
-		"  -n      newline              ;  append newline to output (for -E/-D/-r/..)\n"
-		"  -o      octalstr -> raw      ;  rax2 -o \\162 \\62 # r2\n"
-		"  -r      r2 style output      ;  rax2 -r 0x1234 # same as r2 -c '? 0x1234'\n"
-		"  -s      hexstr -> raw        ;  rax2 -s 43 4a 50\n"
-		"  -S      raw -> hexstr        ;  rax2 -S < /bin/ls > ls.hex\n"
-		"  -rS     raw -> hex.r2        ;  rax2 -rS < /bin/ls > ls.r2\n"
-		"  -t      tstamp -> str        ;  rax2 -t 1234567890\n"
-		"  -u      units                ;  rax2 -u 389289238 # 317.0M\n"
-		"  -v      version              ;  rax2 -v\n"
-		"  -w      signed word          ;  rax2 -w 16 0xffff\n"
-		"  -x      output in hexpairs   ;  rax2 -x 0x1234 # 34120000\n"
-		"  -X      hash string          ;  rax2 -X linux osx\n"
+		"  int        ->  hex              ;  rax2 10\n"
+		"  hex        ->  int              ;  rax2 0xa\n"
+		"  -int       ->  hex              ;  rax2 -77\n"
+		"  -hex       ->  int              ;  rax2 0xffffffb3\n"
+		"  int        ->  bin              ;  rax2 b30\n"
+		"  int        ->  ternary          ;  rax2 t42\n"
+		"  bin        ->  int              ;  rax2 1010d\n"
+		"  ternary    ->  int              ;  rax2 1010dt\n"
+		"  float      ->  hex              ;  rax2 3.33f\n"
+		"  hex        ->  float            ;  rax2 Fx40551ed8\n"
+		"  oct        ->  hex              ;  rax2 35o\n"
+		"  hex        ->  oct              ;  rax2 Ox12 (O is a letter)\n"
+		"  bin        ->  hex              ;  rax2 1100011b\n"
+		"  hex        ->  bin              ;  rax2 Bx63\n"
+		"  ternary    ->  hex              ;  rax2 212t\n"
+		"  hex        ->  ternary          ;  rax2 Tx23\n"
+		"  raw        ->  hex              ;  rax2 -S < /binfile\n"
+		"  hex        ->  raw              ;  rax2 -s 414141\n"
+		"  -a         show ascii table     ;  rax2 -a\n"
+		"  -b <base>  output in <base>     ;  rax2 -b 10 0x46\n"
+		"  -c         output in C string   ;  rax2 -c 0x1234 # \\x34\\x12\\x00\\x00\n"
+		"  -C         dump as C byte array ;  rax2 -C < bytes\n"
+		"  -d         force integer        ;  rax2 -d 3 -> 3 instead of 0x3\n"
+		"  -e         swap endianness      ;  rax2 -e 0x33\n"
+		"  -D         base64 decode        ;  rax2 -D \"aGVsbG8=\"\n"
+		"  -E         base64 encode        ;  rax2 -E \"hello\"\n"
+		"  -f         floating point       ;  rax2 -f 6.3+2.1\n"
+		"  -F         stdin slurp code hex ;  rax2 -F < shellcode.[c/py/js]\n"
+		"  -h         help                 ;  rax2 -h\n"
+		"  -H         hash string          ;  rax2 -H linux osx\n"
+		"  -i         IP address <-> LONG  ;  rax2 -i 3530468537\n"
+		"  -j         json format output   ;  rax2 -j 0x1234 # same as r2 -c '?j 0x1234'\n"
+		"  -k         keep base            ;  rax2 -k 33+3 -> 36\n"
+		"  -K         randomart            ;  rax2 -K 0x34 1020304050\n"
+		"  -n         newline              ;  append newline to output (for -E/-D/-r/..)\n"
+		"  -o         octalstr -> raw      ;  rax2 -o \\162 \\62 # r2\n"
+		"  -q         quiet mode           ;  rax2 -qC < /etc/hosts # be quiet\n"
+		"  -r         r2 style output      ;  rax2 -r 0x1234 # same as r2 -c '? 0x1234'\n"
+		"  -s         hexstr -> raw        ;  rax2 -s 43 4a 50\n"
+		"  -S         raw -> hexstr        ;  rax2 -S < /bin/ls > ls.hex\n"
+		"  -rS        raw -> hex.r2        ;  rax2 -rS < /bin/ls > ls.r2\n"
+		"  -t         tstamp -> str        ;  rax2 -t 1234567890\n"
+		"  -u         units                ;  rax2 -u 389289238 # 317.0M\n"
+		"  -v         version              ;  rax2 -v\n"
+		"  -w         signed word          ;  rax2 -w 16 0xffff\n"
+		"  -x         output in hexpairs   ;  rax2 -x 0x1234 # 34120000\n"
+		"  -X         bin -> hex(bignum)   ;  rax2 -X 111111111 # 0x1ff\n"
+		"  -z         str -> bin           ;  rax2 -z hello\n"
+		"  -Z         bin -> str           ;  rax2 -Z 01000101 01110110\n"
 	);
 	return true;
 }
@@ -213,7 +224,7 @@ static bool invalid_length(RaxActions flags) {
 	return true;
 }
 
-static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int *fm, PJ **pj) {
+static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, RaxMode *mode, PJ **pj) {
 	const char *errstr = NULL;
 	ut8 *buf;
 	char *p, out_mode = (flags->decimal)? 'I': '0';
@@ -225,19 +236,7 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int 
 	if (flags->raw2hexstr) {
 		goto dotherax;
 	}
-	if (*str == '=') {
-		int force_mode = 0;
-		switch (atoi (str + 1)) {
-		case 0: force_mode = str[1]; break;
-		case 2: force_mode = 'B'; break;
-		case 3: force_mode = 'T'; break;
-		case 8: force_mode = 'O'; break;
-		case 10: force_mode = 'I'; break;
-		case 16: force_mode = '0'; break;
-		}
-		*fm = force_mode;
-		return true;
-	}
+
 	bool usedflags = false;
 	if (*str == '-') {
 		while (str[1] && str[1] != ' ') {
@@ -247,10 +246,11 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int 
 			case 's': flags->hexstr2raw = !flags->hexstr2raw; break;
 			case 'e': flags->swapendian = !flags->swapendian; break;
 			case 'S': flags->raw2hexstr = !flags->raw2hexstr; break;
-			case 'b': flags->binstr2raw = !flags->binstr2raw; break;
-			case 'X': flags->hashstr = !flags->hashstr; break;
+			case 'Z': flags->binstr2raw = !flags->binstr2raw; break;
+			case 'H': flags->hashstr = !flags->hashstr; break;
 			case 'k': flags->keepbase = !flags->keepbase; break;
 			case 'f': flags->floating = !flags->floating; break;
+			case 'q': flags->quiet = !flags->quiet; break;
 			case 'd': flags->decimal = !flags->decimal; break;
 			case 'K': flags->randomart = !flags->randomart; break;
 			case 'x': flags->binarynum = !flags->binarynum; break;
@@ -261,15 +261,16 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int 
 			case 'F': flags->slurphex = !flags->slurphex; break;
 			case 'c': flags->binaryraw = !flags->binaryraw; break;
 			case 'w': flags->signedword = !flags->signedword; break;
-			case 'B': flags->str2hexstr = !flags->str2hexstr; break;
+			case 'z': flags->str2hexstr = !flags->str2hexstr; break;
 			case 'r': flags->manybases = !flags->manybases; break;
-			case 'L': flags->binstr2hex = !flags->binstr2hex; break;
-			case 'i': flags->dumpcstr = !flags->dumpcstr; break;
+			case 'X': flags->binstr2hex = !flags->binstr2hex; break;
+			case 'C': flags->dumpcstr = !flags->dumpcstr; break;
 			case 'o': flags->octal2raw = !flags->octal2raw; break;
-			case 'I': flags->ipaddr2num = !flags->ipaddr2num; break;
+			case 'i': flags->ipaddr2num = !flags->ipaddr2num; break;
 			case 'j': flags->jsonbases = !flags->jsonbases; break;
+			case 'b': flags->forcebase = !flags->forcebase; break;
 			case 'v': return r_main_version_print ("rax2", 0);
-			case '\0': return !use_stdin (num, flags, fm, pj);
+			case '\0': return !use_stdin (num, flags, mode, pj);
 			default:
 				/* not as complete as for positive numbers */
 				out_mode = !flags->keepbase? '0': 'I';
@@ -279,7 +280,7 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int 
 					} else if (r_str_endswith (str, "f")) {
 						out_mode = 'l';
 					}
-					return format_output (num, out_mode, str, *fm, *flags);
+					return format_output (num, out_mode, str, *mode, *flags);
 				}
 				help_usage ();
 				return help ();
@@ -288,7 +289,7 @@ static bool rax(RNum *num, char *str, int len, int last, RaxActions *flags, int 
 		}
 		usedflags = true;
 		if (last) {
-			return !use_stdin (num, flags, fm, pj);
+			return !use_stdin (num, flags, mode, pj);
 		}
 		return true;
 	}
@@ -337,7 +338,7 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->binstr2raw) { // -b
+	if (flags->binstr2raw) { // -Z
 		ut8 out[256] = {0};
 		if (r_mem_from_binstring (str, out, sizeof (out) - 1)) {
 			printf ("%s\n", out); // TODO accept non null terminated strings
@@ -346,7 +347,7 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->hashstr) { // -X
+	if (flags->hashstr) { // -H
 		int h = r_str_hash (str);
 		printf ("0x%x\n", h);
 		return true;
@@ -380,7 +381,7 @@ dotherax:
 		free (s);
 		free (m);
 		return true;
-	}
+}
 	if (flags->binarynum) { // -x
 		ut64 n = r_num_calc (num, str, &errstr);
 		if (errstr) {
@@ -414,7 +415,7 @@ dotherax:
 			}
 		}
 		return true;
-	} else if (flags->str2hexstr) { // -B (bin -> str)
+	} else if (flags->str2hexstr) { // -z (bin -> str)
 		char *newstr = r_mem_to_binstring((const ut8*)str, strlen (str));
 		printf ("%s\n", newstr);
 		free (newstr);
@@ -659,27 +660,25 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->binstr2hex) { // -L
+	if (flags->binstr2hex) { // -X
 		r_print_hex_from_bin (NULL, str);
 		return true;
 	}
-	if (flags->dumpcstr) { // -i
-		RStrBuf *sb = r_strbuf_new ("unsigned char buf[] = {");
+	if (flags->dumpcstr) { // -C
+		RStrBuf *sb = r_strbuf_new (flags->quiet ?"  ": "unsigned char buf[] = {\n  ");
 		const int byte_per_col = 12;
 		for (i = 0; i < len - 1; i++) {
 			// wrapping every N bytes
-			if (i % byte_per_col == 0) {
+			if (i > 0 && (i % byte_per_col) == 0) {
 				r_strbuf_append (sb, "\n  ");
 			}
 			r_strbuf_appendf (sb, "0x%02x, ", (ut8) str[i]);
 		}
-		// some care for the last element
-		if (i % byte_per_col == 0) {
-			r_strbuf_append (sb, "\n  ");
-		}
 		r_strbuf_appendf (sb, "0x%02x\n", (ut8) str[len - 1]);
-		r_strbuf_append (sb, "};\n");
-		r_strbuf_appendf (sb, "unsigned int buf_len = %d;\n", len);
+		if (!flags->quiet) {
+			r_strbuf_append (sb, "};\n");
+			r_strbuf_appendf (sb, "unsigned int buf_len = %d;\n", len);
+		}
 		char *s = r_strbuf_drain (sb);
 		if (s) {
 			printf ("%s", s);
@@ -712,7 +711,7 @@ dotherax:
 		}
 		return true;
 	}
-	if (flags->ipaddr2num) { // -I
+	if (flags->ipaddr2num) { // -i
 		if (strchr (str, '.')) {
 			ut8 ip[4];
 			sscanf (str, "%hhd.%hhd.%hhd.%hhd", ip, ip + 1, ip + 2, ip + 3);
@@ -727,6 +726,17 @@ dotherax:
 			}
 			ut8 ip[4] = { ip32 & 0xff, (ip32 >> 8) & 0xff, (ip32 >> 16) & 0xff, ip32 >> 24 };
 			printf ("%d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
+		}
+		return true;
+	}
+	if (flags->forcebase && mode->omode == 0) {
+		switch (atoi (str)) {
+		case 0: mode->omode = str[0]; break;
+		case 2: mode->omode = 'B'; break;
+		case 3: mode->omode = 'T'; break;
+		case 8: mode->omode = 'O'; break;
+		case 10: mode->omode = 'I'; break;
+		case 16: mode->omode = '0'; break;
 		}
 		return true;
 	}
@@ -765,16 +775,16 @@ dotherax:
 	}
 	while ((p = strchr (str, ' '))) {
 		*p = 0;
-		if (!format_output (num, out_mode, str, *fm, *flags)) {
+		if (!format_output (num, out_mode, str, *mode, *flags)) {
 			return false;
 		}
 		str = p + 1;
 	}
-	return *str? format_output (num, out_mode, str, *fm, *flags): true;
+	return *str? format_output (num, out_mode, str, *mode, *flags): true;
 }
 
 R_API int r_main_rax2(int argc, const char **argv) {
-	int i, fm = 0;
+	int i;
 	int rc = 0;
 	int len = 0;
 
@@ -784,12 +794,13 @@ R_API int r_main_rax2(int argc, const char **argv) {
 	} else {
 		RNum *num = r_num_new (NULL, NULL, NULL);
 		RaxActions flags = {0};
+		RaxMode mode = {0};
 		PJ *pj = NULL;
 		for (i = 1; i < argc; i++) {
 			char *argv_i = strdup (argv[i]);
 			if (argv_i) {
 				len = r_str_unescape (argv_i);
-				if (!rax (num, argv_i, len, i == argc - 1, &flags, &fm, &pj)) {
+				if (!rax (num, argv_i, len, i == argc - 1, &flags, &mode, &pj)) {
 					rc = 1;
 				}
 				free (argv_i);

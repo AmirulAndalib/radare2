@@ -217,7 +217,7 @@ static ut8 esil_internal_sizeof_reg(REsil *esil, const char *r) {
 }
 
 static bool alignCheck(REsil *esil, ut64 addr) {
-	// r_anal_archinfo (esil->anal, R_ANAL_ARCHINFO_DATA_ALIGN);
+	// r_anal_archinfo (esil->anal, R_ARCH_INFO_DATA_ALIGN);
 	const unsigned int da = esil->data_align;
 	return !(da > 0 && addr % da);
 }
@@ -806,7 +806,7 @@ static bool esil_js(REsil *esil) {
 //	- condret
 // YES PLS KILL IT
 static bool esil_address(REsil *esil) {
-	R_LOG_WARN ("Support for esil operation $$ is about to end soon, avoid using it!");
+	R_LOG_WARN ("Support for esil operation $$ is about to end soon, use `pc` or `PC` instead avoid using it!");
 	R_RETURN_VAL_IF_FAIL (esil, false);
 	// esil->address = r_reg_getv (esil->anal->reg, "pc");
 	return r_esil_pushnum (esil, esil->addr);

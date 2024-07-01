@@ -1837,26 +1837,31 @@ static bool listCB(RSignItem *it, void *user) {
 	}
 
 	// Zignspace and name (except for radare format)
-	if (ctx->format == '*') {
+	switch (ctx->format) {
+	case '*':
 		if (it->space) {
 			a->cb_printf ("zs %s\n", it->space->name);
 		} else {
 			a->cb_printf ("zs *\n");
 		}
-	} else if (ctx->format == 'q') {
+		break;
+	case 'q':
 		a->cb_printf ("0x%08" PFMT64x " ", it->addr);
 		const char *pad = r_str_pad (' ', 30 - strlen (it->name));
 		a->cb_printf ("%s:%s", it->name, pad);
-	} else if (ctx->format == 'j') {
+		break;
+	case 'j':
 		if (it->space) {
 			pj_ks (ctx->pj, "zignspace", it->space->name);
 		}
 		pj_ks (ctx->pj, "name", it->name);
-	} else {
+		break;
+	default:
 		if (!r_spaces_current (&a->zign_spaces) && it->space) {
 			a->cb_printf ("(%s) ", it->space->name);
 		}
 		a->cb_printf ("%s:\n", it->name);
+		break;
 	}
 
 	// Bytes pattern
@@ -2972,7 +2977,8 @@ R_API char *r_sign_path(RAnal *a, const char *file) {
 		free (abs);
 	}
 
-	abs = r_str_newf (R_JOIN_3_PATHS ("%s", R2_ZIGNS, "%s"), r_sys_prefix (NULL), file);
+	// abs = r_str_newf (R_JOIN_3_PATHS ("%s", R2_ZIGNS, "%s"), r_sys_prefix (NULL), file);
+	abs = r_file_new (r_sys_prefix (NULL), R2_ZIGNS, file, NULL);
 	if (r_file_is_regular (abs)) {
 		return abs;
 	}

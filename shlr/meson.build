@@ -25,7 +25,7 @@ if not capstone_dep.found() or not get_option('use_sys_capstone')
         'fix-x86-16.patch',
       ]
     elif capstone_version == 'v5'
-      CS_TIP = '1bd848fc745656fcc867c58a52483b6491e10b1c'
+      CS_TIP = 'e90ef3928fc329ebe3214a7814aa34318b23f490'
       CS_BRA = 'v5'
       patches_files = [
         'fix-x86-16.patch'
