@@ -202,53 +202,33 @@ static void run_state(SDemangler *sd, SStateInfo *state_info, STypeCodeStr *type
 }
 
 static int copy_string(STypeCodeStr *type_code_str, const char *str_for_copy, size_t copy_len) {
-	int res = 1; // all is OK
 	size_t str_for_copy_len = (copy_len == 0 && str_for_copy) ? strlen (str_for_copy) : copy_len;
 	if (type_code_str->curr_pos >= type_code_str->type_str_len) {
 		return 0;
 	}
 	size_t free_space = type_code_str->type_str_len - type_code_str->curr_pos - 1;
-
 	if (free_space < str_for_copy_len) {
-		int newlen = type_code_str->type_str_len + (str_for_copy_len << 1) + 1;
-		if (newlen < 1 || newlen > UT16_MAX) {
-			res = 0;
-			goto copy_string_err;
-		}
-		char *type_str = (char *) realloc (type_code_str->type_str, newlen);
+		size_t newlen = type_code_str->type_str_len + (str_for_copy_len << 1) + 1;
+		char *type_str = (newlen > UT16_MAX)? NULL: realloc (type_code_str->type_str, newlen);
 		if (!type_str) {
-			res = 0;
-			goto copy_string_err;
+			// the buffer is unusable from here on. Drop it and reset the
+			// bookkeeping so any later call bails out at the curr_pos check
+			// above rather than writing through a stale offset.
+			free_type_code_str_struct (type_code_str);
+			return 0;
 		}
-		// publish the new length only once the buffer really grew, so that
-		// type_str_len never describes an allocation that does not exist
 		type_code_str->type_str = type_str;
 		type_code_str->type_str_len = newlen;
 	}
-
-	if (!type_code_str->type_str) {
-		return 0;
-	}
 	char *dst = type_code_str->type_str + type_code_str->curr_pos;
-
 	if (str_for_copy) {
-		r_str_ncpy  (dst, str_for_copy, str_for_copy_len + 1);
+		r_str_ncpy (dst, str_for_copy, str_for_copy_len + 1);
 	} else {
 		memset (dst, 0, str_for_copy_len);
 	}
 	type_code_str->curr_pos += str_for_copy_len;
 	type_code_str->type_str[type_code_str->curr_pos] = '\0';
-
-copy_string_err:
-	if (!res) {
-		// the buffer is unusable from here on. Drop it and reset the
-		// bookkeeping so any later call bails out at the curr_pos check
-		// above rather than writing through a stale offset.
-		R_FREE (type_code_str->type_str);
-		type_code_str->type_str_len = 0;
-		type_code_str->curr_pos = 0;
-	}
-	return res;
+	return 1;
 }
 
 static int get_template_params(SDemangler *sd, const char *sym, size_t *amount_of_read_chars, char **str_type_code) {
@@ -1523,26 +1503,18 @@ static void init_state_struct(SStateInfo *state, const char *buff_for_parsing) {
 	state->err = eTCStateMachineErrOK;
 }
 
-static bool init_type_code_str_struct(STypeCodeStr *type_coder_str) {
-#define TYPE_STR_LEN 1024
-	// 1 - initialization finish with success, else - 0
-	type_coder_str->type_str_len = TYPE_STR_LEN;
-
-	type_coder_str->type_str = (char *) calloc (TYPE_STR_LEN, sizeof (char));
-	if (!type_coder_str->type_str) {
-		return false;
-	}
-	memset (type_coder_str->type_str, 0, TYPE_STR_LEN * sizeof (char));
-	type_coder_str->curr_pos = 0; // strlen ("unknown type");
-//	strncpy (type_coder_str->type_str, "unknown_type", type_coder_str->curr_pos);
-#undef TYPE_STR_LEN
-	return true;
+static bool init_type_code_str_struct(STypeCodeStr *type_code_str) {
+	const size_t len = 1024;
+	type_code_str->type_str = calloc (len, 1);
+	type_code_str->type_str_len = type_code_str->type_str? len: 0;
+	type_code_str->curr_pos = 0;
+	return type_code_str->type_str != NULL;
 }
 
 static void free_type_code_str_struct(STypeCodeStr *type_code_str) {
 	if (type_code_str) {
-		R_FREE (type_code_str->type_str);
-		type_code_str->type_str_len = 0;
+		free (type_code_str->type_str);
+		memset (type_code_str, 0, sizeof (*type_code_str));
 	}
 }
 
