@@ -14,7 +14,8 @@ R_API int r_base91_encode(char *bout, const ut8 *bin, int len);
 R_API int r_base91_decode(ut8 *bout, const char *bin, int len);
 /* Allocating variants that size the output buffer themselves. The encoded
  * string is NUL terminated; the decoded buffer is not, so it reports its
- * length through `olen` when that is not NULL. */
+ * length through `olen` when that is not NULL. Inputs whose output would not
+ * fit in an int are refused with NULL. */
 R_API char *r_base91_encode_dyn(const ut8 *bin, int len);
 R_API ut8 *r_base91_decode_dyn(const char *bin, int len, int *olen);
 

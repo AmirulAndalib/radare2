@@ -100,43 +100,37 @@ R_API int r_base91_encode(char *bout, const ut8 *bin, int len) {
 R_API char *r_base91_encode_dyn(const ut8 *bin, int len) {
 	R_RETURN_VAL_IF_FAIL (bin, NULL);
 	const size_t slen = (len < 0)? strlen ((const char *)bin): (size_t)len;
-	// every 13 bits of input emit 2 chars, the tail flush emits up to 2 more
+	// every 13 bits of input emit 2 chars, the tail flush emits up to 2 more.
+	// keep the output below ST32_MAX so the int counters in the encoder and
+	// in the callers cannot wrap, that also bounds slen
 	size_t olen;
-	if (r_mul_overflow (slen, (size_t)16, &olen)) {
+	if (r_mul_overflow (slen, (size_t)16, &olen) || olen / 13 + 3 > ST32_MAX) {
 		return NULL;
 	}
-	olen /= 13;
-	if (r_add_overflow (olen, (size_t)3, &olen)) {
-		return NULL;
+	char *bout = malloc (olen / 13 + 3);
+	if (bout) {
+		bout[r_base91_encode (bout, bin, (int)slen)] = 0;
 	}
-	char *bout = malloc (olen);
-	if (!bout) {
-		return NULL;
-	}
-	int written = r_base91_encode (bout, bin, (int)slen);
-	bout[written] = 0;
 	return bout;
 }
 
 R_API ut8 *r_base91_decode_dyn(const char *bin, int len, int *olen) {
 	R_RETURN_VAL_IF_FAIL (bin, NULL);
+	if (olen) {
+		*olen = 0;
+	}
 	const size_t slen = (len < 0)? strlen (bin): (size_t)len;
 	// each pair of chars carries at most 14 bits, plus one tail byte
 	size_t osz;
-	if (r_mul_overflow (slen, (size_t)7, &osz)) {
+	if (slen > ST32_MAX || r_mul_overflow (slen, (size_t)7, &osz)) {
 		return NULL;
 	}
-	osz /= 8;
-	if (r_add_overflow (osz, (size_t)3, &osz)) {
-		return NULL;
-	}
-	ut8 *bout = malloc (osz);
-	if (!bout) {
-		return NULL;
-	}
-	int written = r_base91_decode (bout, bin, (int)slen);
-	if (olen) {
-		*olen = written;
+	ut8 *bout = malloc (osz / 8 + 3);
+	if (bout) {
+		int written = r_base91_decode (bout, bin, (int)slen);
+		if (olen) {
+			*olen = written;
+		}
 	}
 	return bout;
 }
