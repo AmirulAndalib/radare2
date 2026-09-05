@@ -12,14 +12,9 @@ static const char b91[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
 							'+', ',', '.', '/', ':', ';', '<', '=', '>', '?',
 							'@', '[', ']', '^', '_', '`', '{', '|', '}', '~', '"'};
 
-int get_char_index(const char c) {
-	int i;
-	for (i = 0; i < 91; i++ ) {
-		if (b91[i] == c) {
-			return i;
-		}
-	}
-	return -1;
+static int get_char_index(const char c) {
+	const char *p = memchr (b91, c, sizeof (b91));
+	return p? (int)(p - b91): -1;
 }
 
 R_API int r_base91_decode(ut8* bout, const char *bin, int len) {
