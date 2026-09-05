@@ -36,11 +36,7 @@ static bool is_bochs(RDebug *dbg) {
 
 static bool r_debug_bochs_breakpoint(RBreakpoint *bp, RBreakpointItem *b, bool set) {
 	char cmd[64];
-	char num[4];
-	char addr[19];
-	char bufcmd[100];
-	ut64 a;
-	int  n,i,lenRec;
+	int i, lenRec;
 	R_LOG_DEBUG ("bochs_breakpoint");
 	if (!bp || !b) {
 		return false;
@@ -66,33 +62,19 @@ static bool r_debug_bochs_breakpoint(RBreakpoint *bp, RBreakpointItem *b, bool s
 		<bochs:39>
 		*/
 		bochs_send_cmd (pd->desc, "blist", true);
-		lenRec = strlen (pd->desc->data);
-		a = -1;
-		n = 0;
-		if (!strncmp (pd->desc->data, "Num Type", 8)) {
-			i = 37;
-			do {
-				if (pd->desc->data[i + 24] == 'y') {
-					strncpy(num, &pd->desc->data[i], 3);
-					num[3] = 0;
-					strncpy(addr, &pd->desc->data[i + 28], 18);
-					addr[18] = 0;
-					n = r_num_get (NULL,num);
-					a = r_num_get (NULL,addr);
-					//eprintf("parseado %x %016"PFMT64x"\n",n,a);
-					if (a == b->addr) {
-						break;
-					}
+		const char *data = pd->desc->data;
+		if (r_str_startswith (data, "Num Type")) {
+			// rows are 48 chars wide, the enable flag sits at column 24 and the 18
+			// char address at column 28, so only walk rows that are fully present
+			lenRec = strlen (data);
+			for (i = 37; i + 46 <= lenRec && data[i] != '<'; i += 48) {
+				if (data[i + 24] == 'y' && r_num_get (NULL, data + i + 28) == b->addr) {
+					snprintf (cmd, sizeof (cmd), "d %d", atoi (data + i));
+					bochs_send_cmd (pd->desc, cmd, true);
+					break;
 				}
-				i += 48;
-			} while (pd->desc->data[i] != '<' && i < lenRec - 4);
+			}
 		}
-		if (a == b->addr) {
-			snprintf (bufcmd, sizeof (bufcmd), "d %i", n);
-			//eprintf("[unset] Break point localizado indice = %x (%x) %s \n",n,(DWORD)a,bufcmd);
-			bochs_send_cmd (pd->desc, bufcmd, true);
-		}
-
 	}
 	return true;
 }
