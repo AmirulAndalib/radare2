@@ -763,7 +763,8 @@ static size_t get_namespace_and_name(SDemangler *sd, const char *buf, STypeCodeS
 			break;
 		}
 
-		if (isdigit ((ut8)*tmp)) {
+		const bool backref = isdigit ((ut8)*tmp);
+		if (backref) {
 			tmp = r_list_get_n (sd->abbr_names, *tmp - '0');
 			if (!tmp) {
 				R_FREE (str_info);
@@ -783,7 +784,9 @@ static size_t get_namespace_and_name(SDemangler *sd, const char *buf, STypeCodeS
 		memorize = true;
 
 		read_len += len;
-		if (len == 1) {
+		if (backref) {
+			// a back reference stands for "name@", so it carries no separator
+			// of its own. A one letter name does and must take the path below
 			if (*(prev_pos + 1) == '@') {
 				prev_pos = curr_pos;
 			} else {
