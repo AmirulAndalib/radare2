@@ -14,31 +14,22 @@ static int base91_get_key_size(RMutaSession *ms) {
 }
 
 static bool update(RMutaSession *ms, const ut8 *buf, int len) {
-	R_RETURN_VAL_IF_FAIL (ms && buf && len > 0, false);
-
+	if (len < 1) {
+		return len == 0;
+	}
 	int olen = 0;
 	ut8 *obuf = NULL;
 	switch (ms->dir) {
 	case R_MUTA_OP_ENCRYPT:
-		{
-			obuf = (ut8 *)r_base91_encode_dyn (buf, len);
-			if (!obuf) {
-				return false;
-			}
-			size_t encoded_len = strlen ((const char *)obuf);
-			if (encoded_len > ST32_MAX) {
-				free (obuf);
-				return false;
-			}
-			olen = (int)encoded_len;
-		}
+		obuf = (ut8 *)r_base91_encode_dyn (buf, len);
+		olen = obuf? (int)strlen ((const char *)obuf): 0;
 		break;
 	case R_MUTA_OP_DECRYPT:
 		obuf = r_base91_decode_dyn ((const char *)buf, len, &olen);
-		if (!obuf) {
-			return false;
-		}
 		break;
+	}
+	if (!obuf) {
+		return false;
 	}
 	if (olen > 0) {
 		r_muta_session_append (ms, obuf, olen);
