@@ -1554,8 +1554,12 @@ static EDemanglerErr get_type_code_string(SDemangler *sd, const char *sym, size_
 		}
 	}
 
-	*str_type_code = strdup (type_code_str.type_str);
+	// a failed copy_string drops the buffer, report that as an allocation error
+	*str_type_code = type_code_str.type_str? strdup (type_code_str.type_str): NULL;
 	*amount_of_read_chars = state.amount_of_read_chars;
+	if (!*str_type_code) {
+		err = eDemanglerErrMemoryAllocation;
+	}
 
 get_type_code_string_err:
 	free (tmp_sym);
