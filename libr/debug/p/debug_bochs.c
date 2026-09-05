@@ -313,10 +313,8 @@ static RDebugReasonType r_debug_bochs_wait(RDebug *dbg, int pid) {
 	}
 	RCore *core = dbg->coreb.core;
 
-	char strIP[19];
 	int i = 0;
 	const char *x;
-	char *ini = 0, *fin = 0;
 
 	if (pd->bStep) {
 		pd->bStep = false;
@@ -348,16 +346,10 @@ static RDebugReasonType r_debug_bochs_wait(RDebug *dbg, int pid) {
 	// Next at t=394241428
 	// (0) [0x000000337635] 0020:0000000000337635 (unk. ctxt): add eax, esi              ; 03c6
 	pd->ripStop = 0;
-	if ((x = strstr (pd->desc->data, "Next at"))) {
-		if ((ini = strstr (x, "[0x"))) {
-			if ((fin = strchr (ini, ']'))) {
-				int len = fin - ini - 1;
-				strncpy (strIP, ini+1, len);
-				strIP[len] = 0;
-				//eprintf(" parada EIP = %s\n",strIP);
-				pd->ripStop = r_num_get (NULL, strIP);
-			}
-		}
+	if ((x = strstr (pd->desc->data, "Next at")) && (x = strstr (x, "[0x"))) {
+		// the hex parser stops at the closing bracket, whatever its distance,
+		// copying it into a fixed buffer first let a long run overflow the stack
+		pd->ripStop = r_num_get (NULL, x + 1);
 	}
 	pd->desc->data[0] = 0;
 
