@@ -82,8 +82,6 @@ static bool r_debug_bochs_breakpoint(RBreakpoint *bp, RBreakpointItem *b, bool s
 static bool bochs_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 	char strReg[19];
 	char regname[4];
-	char strBase[19];
-	char strLimit[19];
 	int i = 0, pos = 0, lenRec = 0;
 	ut64 val = 0, valRIP = 0; //, posRIP = 0;
 	if (!is_bochs (dbg)) {
@@ -168,36 +166,16 @@ static bool bochs_reg_read(RDebug *dbg, int type, ut8 *buf, int size) {
 		*/
 		bochs_send_cmd (pd->desc, "sreg", true);
 
-		pos = 0x38;
-		char * s [] = { "es:0x", "cs:0x","ss:0x","ds:0x","fs:0x","gs:0x",0};
-		const char *x;
+		const char *segs[] = { "es:0x", "cs:0x", "ss:0x", "ds:0x", "fs:0x", "gs:0x", NULL };
 		int n;
-		for (n = 0; s[n] != 0; n++) {
-			if ((x = strstr (pd->desc->data,s[n]))) {
-				if (pos + 2 > size) {
-					break;
-				}
-				strncpy (&strReg[0], x+3, 7);
-				strReg[6] = 0;
-				val = r_num_get (NULL, strReg);
-				strncpy (regname, s[n], 2);
-				regname[2] = 0;
-				if ((x = strstr (x, "base="))) {
-					strncpy (strBase, x + 5, 10);
-					strBase[10] = 0;
-					if ((x = strstr (x, "limit="))) {
-						strncpy (strLimit, x + 6, 10);
-						strLimit[10] = 0;
-					}
-				}
-				//eprintf("%s localizado %s %04x base = %s limit = %s\n",regname,strReg,(WORD)val,strBase,strLimit);
+		// each segment has a fixed slot in the profile, so advance even when missing
+		for (n = 0, pos = 0x38; segs[n] && pos + 2 <= size; n++, pos += 2) {
+			const char *x = strstr (pd->desc->data, segs[n]);
+			if (x) {
+				val = r_num_get (NULL, x + 3);
 				memcpy (&buf[pos], &val, 2);
-				pos += 2;
-				if (pd->bAjusta) {
-					if (!strncmp (regname,"cs",2)) {
-						valRIP += (val*0x10); // desplazamos CS y lo añadimos a RIP
-					//eprintf("%016"PFMT64x"\n",valRIP);
-					}
+				if (pd->bAjusta && n == 1) {
+					valRIP += val * 0x10; // desplazamos CS y lo añadimos a RIP
 				}
 			}
 		}
