@@ -1420,7 +1420,7 @@ DEF_STATE_ACTION(Dollar) {
 		state->state = eTCStateEnd;
 		break;
 	case 'T':
-		copy_string (type_code_str, "std::nullptr_t", 15);
+		copy_string (type_code_str, "std::nullptr_t", 0);
 		state->state = eTCStateEnd;
 		break;
 	case 'V':
