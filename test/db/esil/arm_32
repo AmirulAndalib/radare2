@@ -3577,9 +3577,6 @@ EOF
 RUN
 
 NAME=register shifted operand uses only the low byte of the shift register
-RUN
-
-NAME=immediate shifts with the s suffix take the carry from the source register
 FILE=malloc://0x200
 ARGS=-a arm -b 32
 CMDS=<<EOF
@@ -3627,8 +3624,15 @@ EXPECT=<<EOF
 0x00000000
 0x00000001
 0x00000001
+EOF
 RUN
 
+NAME=immediate shifts with the s suffix take the carry from the source register
+FILE=malloc://0x200
+ARGS=-a arm -b 32
+CMDS=<<EOF
+aei
+aeim
 aer r1=0x20000004
 wx a101b0e1 @ 0
 aer PC=0
