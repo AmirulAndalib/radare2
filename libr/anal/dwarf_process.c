@@ -754,8 +754,11 @@ static void parse_typedef(Context *ctx, ut64 idx) {
 			break;
 		}
 	}
-	if (!name || !type) { // type has to have a name for now
+	if (!name) {
 		goto cleanup;
+	}
+	if (!type) {
+		type = strdup ("void");
 	}
 	RAnalBaseType *base_type = r_anal_base_type_new (R_ANAL_BASE_TYPE_KIND_TYPEDEF);
 	if (!base_type) {
